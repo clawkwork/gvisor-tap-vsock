@@ -33,7 +33,12 @@ func (n *VirtualNetwork) SetNotificationSender(notificationSender *notification.
 	n.networkSwitch.SetNotificationSender(notificationSender)
 }
 
-func New(configuration *types.Configuration) (*VirtualNetwork, error) {
+func New(configuration *types.Configuration, opts ...Option) (*VirtualNetwork, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	_, subnet, err := net.ParseCIDR(configuration.Subnet)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse subnet cidr: %w", err)
@@ -78,7 +83,7 @@ func New(configuration *types.Configuration) (*VirtualNetwork, error) {
 		return nil, fmt.Errorf("cannot create network stack: %w", err)
 	}
 
-	mux, err := addServices(configuration, stack, ipPool)
+	mux, err := addServices(configuration, stack, ipPool, o)
 	if err != nil {
 		return nil, fmt.Errorf("cannot add network services: %w", err)
 	}

@@ -23,10 +23,15 @@ type upstreamResolver interface {
 	LookupTXT(ctx context.Context, name string) ([]string, error)
 }
 
+// Observer is notified of each A record the embedded DNS server answers to
+// the guest. A nil Observer is a no-op.
+type Observer func(queryName string, ip net.IP)
+
 type dnsHandler struct {
 	zones     []types.Zone
 	zonesLock sync.RWMutex
 	upstream  upstreamResolver
+	observer  Observer
 }
 
 func (h *dnsHandler) handle(w dns.ResponseWriter, r *dns.Msg, responseMessageSize int) {
@@ -143,6 +148,9 @@ func (h *dnsHandler) addAnswers(m *dns.Msg) {
 					},
 					A: ip.IP.To4(),
 				})
+				if h.observer != nil {
+					h.observer(q.Name, ip.IP.To4())
+				}
 			}
 		case dns.TypeCNAME:
 			cname, err := resolver.LookupCNAME(context.TODO(), q.Name)
@@ -243,15 +251,15 @@ type Server struct {
 	handler *dnsHandler
 }
 
-func New(udpConn net.PacketConn, tcpLn net.Listener, zones []types.Zone) (*Server, error) {
+func New(udpConn net.PacketConn, tcpLn net.Listener, zones []types.Zone, observer Observer) (*Server, error) {
 	upstream := &net.Resolver{
 		PreferGo: false,
 	}
-	return NewWithUpstreamResolver(udpConn, tcpLn, zones, upstream)
+	return NewWithUpstreamResolver(udpConn, tcpLn, zones, upstream, observer)
 }
 
-func NewWithUpstreamResolver(udpConn net.PacketConn, tcpLn net.Listener, zones []types.Zone, upstream upstreamResolver) (*Server, error) {
-	handler := &dnsHandler{zones: zones, upstream: upstream}
+func NewWithUpstreamResolver(udpConn net.PacketConn, tcpLn net.Listener, zones []types.Zone, upstream upstreamResolver, observer Observer) (*Server, error) {
+	handler := &dnsHandler{zones: zones, upstream: upstream, observer: observer}
 	return &Server{udpConn: udpConn, tcpLn: tcpLn, handler: handler}, nil
 }
 
